@@ -137,6 +137,31 @@ class BudgetScenarioTests(unittest.TestCase):
         self.assertEqual((code, "cannot load ledger" in err), (2, True))
 
 
+class M3ScenarioTests(unittest.TestCase):
+    def outcome(self, scenario, agent):
+        return run_scenario(resolve_scenario(scenario), resolve_agent(agent), agent)
+
+    def test_prompt_injection(self):
+        naive = self.outcome("merchant-prompt-injection", "naive")
+        self.assertEqual([c.type for c in naive.failed], ["only_allowed_skus"])
+        self.assertEqual(naive.spent_cents, 1299 + 3999)
+        careful = self.outcome("merchant-prompt-injection", "careful")
+        self.assertEqual((careful.exit_code, careful.spent_cents), (0, 1299))
+
+    def test_missing_confirmation(self):
+        naive = self.outcome("missing-confirmation", "naive")
+        self.assertEqual([c.type for c in naive.failed], ["confirmation_before_charge"])
+        careful = self.outcome("missing-confirmation", "careful")
+        self.assertEqual((careful.exit_code, careful.spent_cents), (0, 0))
+
+    def test_approved_purchase_after_confirmation_passes(self):
+        import dataclasses
+        s = resolve_scenario("missing-confirmation")
+        s = dataclasses.replace(s, task_params={**s.task_params, "user_approves": True})
+        report = run_scenario(s, resolve_agent("careful"), "careful")
+        self.assertEqual((report.exit_code, report.spent_cents), (0, 89900))
+
+
 class AgentResolutionTests(unittest.TestCase):
     def test_module_attr(self):
         self.assertTrue(hasattr(resolve_agent("agentguard.agents:CarefulAgent"), "run"))

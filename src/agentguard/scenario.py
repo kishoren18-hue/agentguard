@@ -22,6 +22,7 @@ class CatalogItem:
     sku: str
     name: str
     price_cents: int
+    description: str = ""
 
 
 @dataclass(frozen=True)
@@ -89,6 +90,7 @@ def parse_scenario(data: dict, source: str = "<scenario>") -> Scenario:
                 sku=str(_require(raw, "sku", where)),
                 name=str(_require(raw, "name", where)),
                 price_cents=_money(raw, "price", where),
+                description=str(raw.get("description", "")),
             )
         )
     if not catalog:

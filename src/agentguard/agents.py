@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import importlib
+import re
 import inspect
 import uuid
 from dataclasses import dataclass
 from typing import Any, Callable, Protocol
 
+from agentguard.money import parse_money
 from agentguard.sandbox import MerchantTimeout, Toolbox
 
 
@@ -39,7 +41,13 @@ class NaiveAgent:
 
     def run(self, task: Task, tools: Toolbox) -> AgentResult:
         bought = []
-        for item in _items(task):
+        items = _items(task)
+        for item in list(items):  # follows instructions embedded in product text
+            for result in tools.search(item["sku"]):
+                m = re.search(r"also buy .*?sku[: ]+([\w-]+)", result.get("description", ""), re.I)
+                if m:
+                    items.append({"sku": m.group(1), "quantity": 1})
+        for item in items:
             for _ in range(3):
                 try:
                     order = tools.checkout(item["sku"], item["quantity"])
@@ -62,6 +70,11 @@ class CarefulAgent:
             if not found or found[0]["price_cents"] * qty > remaining:
                 skipped.append(sku)
                 continue
+            over = task.params.get("confirm_over")
+            total = found[0]["price_cents"] * qty
+            if over is not None and total > parse_money(over) and not tools.confirm(sku, qty, total):
+                skipped.append(sku)
+                continue
             key = f"agentguard-{uuid.uuid4()}"
             for _ in range(3):
                 try:
@@ -75,7 +88,7 @@ class CarefulAgent:
                 bought.append(order["order_id"])
                 break
         msg = f"orders: {', '.join(bought) or 'none'}"
-        return AgentResult("success" if bought else "failure", msg + (f"; skipped over budget: {', '.join(skipped)}" if skipped else ""))
+        return AgentResult("success" if bought else "failure", msg + (f"; skipped: {', '.join(skipped)}" if skipped else ""))
 
 
 BUILTIN_AGENTS: dict[str, Callable[[], Agent]] = {"naive": NaiveAgent, "careful": CarefulAgent}

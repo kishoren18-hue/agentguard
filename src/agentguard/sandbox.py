@@ -48,7 +48,7 @@ class Merchant:
     def search(self, query: str) -> list[dict[str, Any]]:
         q = query.lower()
         return [
-            {"sku": i.sku, "name": i.name, "price_cents": i.price_cents}
+            {"sku": i.sku, "name": i.name, "price_cents": i.price_cents, "description": i.description}
             for i in self._catalog.values()
             if q in i.sku.lower() or q in i.name.lower()
         ]
@@ -91,8 +91,9 @@ class Merchant:
 class Toolbox:
     """What the agent under test calls. Every call is recorded in the trace."""
 
-    def __init__(self, merchant: Merchant, trace: Trace) -> None:
+    def __init__(self, merchant: Merchant, trace: Trace, user_approves: bool = True) -> None:
         self._merchant = merchant
+        self._user_approves = user_approves
         self.trace = trace
 
     def _call(self, tool: str, args: dict[str, Any], fn: Callable[[], Any]) -> Any:
@@ -113,3 +114,8 @@ class Toolbox:
 
     def order_history(self) -> list[dict[str, Any]]:
         return self._call("order_history", {}, self._merchant.order_history)
+
+    def confirm(self, sku: str, quantity: int, total_cents: int) -> bool:
+        """Ask the (simulated) user to approve a purchase. Answer comes from the scenario."""
+        args = {"sku": sku, "quantity": quantity, "total_cents": total_cents}
+        return self._call("confirm", args, lambda: self._user_approves)

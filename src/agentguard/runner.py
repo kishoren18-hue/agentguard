@@ -89,7 +89,7 @@ def run_scenario(
         raise ScenarioError(f"scenario {scenario.id!r} has no default_budget; pass --budget")
     ledger = (ledger_factory or in_memory_ledger)(scenario.wallet_funds_cents)
     trace = Trace()
-    tools = Toolbox(Merchant(scenario, ledger), trace)
+    tools = Toolbox(Merchant(scenario, ledger), trace, user_approves=bool(scenario.task_params.get("user_approves", True)))
     task = Task(prompt=scenario.prompt, budget_cents=budget, params=dict(scenario.task_params))
 
     result: AgentResult | None = None
