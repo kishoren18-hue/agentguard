@@ -116,8 +116,8 @@ class EndToEndTests(unittest.TestCase):
     def test_trace_records_tool_calls(self):
         report = self.run_agent("naive")
         tools = [e["tool"] for e in report.trace]
-        self.assertEqual(tools, ["checkout", "checkout"])
-        self.assertIn("MerchantTimeout", report.trace[0]["error"])
+        self.assertEqual(tools, ["search", "checkout", "checkout"])
+        self.assertIn("MerchantTimeout", report.trace[1]["error"])
 
 
 class BudgetScenarioTests(unittest.TestCase):
