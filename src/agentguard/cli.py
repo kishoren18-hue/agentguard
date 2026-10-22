@@ -31,11 +31,29 @@ def build_parser() -> argparse.ArgumentParser:
     test.add_argument("--ledger", help="module:factory building a LedgerBackend from funds_cents (default: in-memory)")
     test.add_argument("--json", action="store_true", help="emit a machine-readable report")
 
+    matrix = sub.add_parser("matrix", help="run agents against every built-in scenario")
+    matrix.add_argument("--agents", default="naive,careful", help="comma-separated agent specs")
+
     sub.add_parser("list", help="list built-in scenarios")
 
     validate = sub.add_parser("validate", help="check a scenario file")
     validate.add_argument("path")
     return parser
+
+
+def _matrix(agents: list[str]) -> int:
+    scenarios = list_builtin()
+    width = max(len(s.id) for s in scenarios)
+    print(f"{'scenario':{width}}  " + "  ".join(f"{a:8}" for a in agents))
+    worst = 0
+    for sc in scenarios:
+        cells = []
+        for a in agents:
+            report = run_scenario(sc, resolve_agent(a), a)
+            worst = max(worst, report.exit_code)
+            cells.append({0: "pass", 1: "FAIL"}.get(report.exit_code, "error"))
+        print(f"{sc.id:{width}}  " + "  ".join(f"{c:8}" for c in cells))
+    return worst
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -45,6 +63,8 @@ def main(argv: list[str] | None = None) -> int:
             for s in list_builtin():
                 print(f"{s.id:28} {s.category:20} {s.name}")
             return 0
+        if args.command == "matrix":
+            return _matrix([a.strip() for a in args.agents.split(",") if a.strip()])
         if args.command == "validate":
             s = load_scenario_file(args.path)
             print(f"ok: {s.id} ({len(s.checks)} checks, {len(s.faults)} faults)")

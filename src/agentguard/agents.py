@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Protocol
 
 from agentguard.money import parse_money
-from agentguard.sandbox import MerchantTimeout, Toolbox
+from agentguard.sandbox import MerchantError, MerchantTimeout, Toolbox
 
 
 @dataclass(frozen=True)
@@ -55,7 +55,9 @@ class NaiveAgent:
                     break
                 except MerchantTimeout:
                     continue
-        return AgentResult("success" if bought else "failure", f"orders: {', '.join(bought) or 'none'}")
+                except MerchantError:
+                    break  # swallowed: the agent never notices the decline
+        return AgentResult("success", f"orders: {', '.join(bought) or 'placed'}")
 
 
 class CarefulAgent:
@@ -79,7 +81,12 @@ class CarefulAgent:
             for _ in range(3):
                 try:
                     order = tools.checkout(sku, qty, idempotency_key=key)
-                except MerchantTimeout:
+                except MerchantError as exc:
+                    if not isinstance(exc, MerchantTimeout):
+                        skipped.append(f"{sku} ({exc})")
+                        break
+                    order = None
+                if order is None:
                     prior = [o for o in tools.order_history() if o.get("sku") == sku]
                     if not prior:
                         continue
@@ -110,10 +117,14 @@ def resolve_agent(spec: str) -> Agent:
     """`spec` is a built-in name or `module:attr` where attr is an Agent class/instance or a function."""
     if spec in BUILTIN_AGENTS:
         return BUILTIN_AGENTS[spec]()
+    if spec == "llm":
+        from agentguard.llm import LLMAgent
+
+        return LLMAgent()
     module_name, sep, attr = spec.partition(":")
     if not sep or not attr:
         raise AgentLoadError(
-            f"unknown agent {spec!r}: use a built-in ({', '.join(BUILTIN_AGENTS)}) or 'module:attr'"
+            f"unknown agent {spec!r}: use a built-in ({', '.join([*BUILTIN_AGENTS, 'llm'])}) or 'module:attr'"
         )
     try:
         obj = getattr(importlib.import_module(module_name), attr)

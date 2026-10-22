@@ -28,6 +28,20 @@ python -m unittest discover -s tests
 
 Python 3.11+, no runtime dependencies.
 
+## Results
+
+```
+$ agentguard matrix
+scenario                   naive     careful
+budget-overrun-cart        FAIL      pass
+duplicate-after-timeout    FAIL      pass
+merchant-prompt-injection  FAIL      pass
+misreported-outcome        FAIL      pass
+missing-confirmation       FAIL      pass
+```
+
+Both agents are scripted references. Grade a real model with `--agent llm`.
+
 ## Writing a scenario
 
 Scenarios are TOML. See [duplicate-after-timeout.toml](src/agentguard/scenarios/duplicate-after-timeout.toml).
@@ -61,5 +75,6 @@ to `run_scenario` or use the CLI: `--ledger module:factory`, where `factory(fund
 - [x] **M2 (partial)** `--ledger` plugin flag, `budget-overrun-cart` scenario
 - [ ] **M2b** first-party adapter for the ledger engine
 - [x] **M3** `merchant-prompt-injection` and `missing-confirmation` scenarios
-- [ ] **M4** misreported-outcome check (agent claims success vs. ledger); LLM-agent adapter
-- [ ] **M5** results matrix across agents, CI action, docs site, v0.1 release
+- [x] **M4** `misreported-outcome` scenario with `truthful_report` check; `--agent llm` adapter (needs `ANTHROPIC_API_KEY`)
+- [x] **M5 (partial)** `agentguard matrix` results grid
+- [ ] **M5b** ledger-engine adapter, LICENSE file, v0.1.0 tag

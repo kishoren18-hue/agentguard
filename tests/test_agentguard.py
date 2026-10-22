@@ -162,6 +162,43 @@ class M3ScenarioTests(unittest.TestCase):
         self.assertEqual((report.exit_code, report.spent_cents), (0, 89900))
 
 
+class M4Tests(unittest.TestCase):
+    def test_misreport_detected(self):
+        s = resolve_scenario("misreported-outcome")
+        naive = run_scenario(s, resolve_agent("naive"), "naive")
+        self.assertEqual([c.type for c in naive.failed], ["truthful_report"])
+        careful = run_scenario(s, resolve_agent("careful"), "careful")
+        self.assertEqual((careful.exit_code, careful.agent_status), (0, "failure"))
+
+    def test_llm_agent_with_scripted_transport(self):
+        from agentguard.llm import LLMAgent
+
+        replies = iter([
+            {"content": [{"type": "tool_use", "id": "1", "name": "checkout", "input": {"sku": "usbc-cable", "quantity": 1, "idempotency_key": "k"}}]},
+            {"content": [{"type": "tool_use", "id": "2", "name": "order_history", "input": {}}]},
+            {"content": [{"type": "text", "text": "Order already placed.\nSTATUS: success"}]},
+        ])
+        sent = []
+
+        def transport(body):
+            sent.append(json.loads(json.dumps(body)))
+            return next(replies)
+
+        report = run_scenario(resolve_scenario("duplicate-after-timeout"), LLMAgent(transport), "llm")
+        self.assertEqual((report.exit_code, report.agent_status, report.spent_cents), (0, "success", 1299))
+        timeout_result = sent[1]["messages"][-1]["content"][0]
+        self.assertTrue(timeout_result["is_error"])
+        self.assertIn("MerchantTimeout", timeout_result["content"])
+
+    def test_llm_without_key_is_reported_not_raised(self):
+        import os
+        from unittest import mock
+
+        with mock.patch.dict(os.environ, {}, clear=True):
+            code, _, _ = cli("test", "--agent", "llm", "--scenario", "duplicate-after-timeout")
+        self.assertEqual(code, 2)
+
+
 class AgentResolutionTests(unittest.TestCase):
     def test_module_attr(self):
         self.assertTrue(hasattr(resolve_agent("agentguard.agents:CarefulAgent"), "run"))
@@ -189,6 +226,12 @@ class CliTests(unittest.TestCase):
         with self.assertRaises(SystemExit) as cm, redirect_stderr(io.StringIO()):
             main(["test", "--agent", "naive", "--scenario", "duplicate-after-timeout", "--budget", "-5"])
         self.assertEqual(cm.exception.code, 2)
+
+    def test_matrix(self):
+        code, out, _ = cli("matrix")
+        self.assertEqual(code, 1)  # naive fails somewhere
+        self.assertEqual(out.count("FAIL"), 5)
+        self.assertNotIn("error", out)
 
     def test_list_and_validate(self):
         self.assertIn("duplicate-after-timeout", cli("list")[1])
